@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>GTA V Collaborative Map — v6 Secure</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.css"/>
+<style>
+  :root{--gold:#d8c19a;--gold-strong:#b07f2a;--bg:#070709}
+  html,body,#map{height:100%;margin:0;padding:0}
+  body{font-family:Inter,system-ui,Arial;background:var(--bg);color:#e6eef6}
+  /* left vertical toolbar (GTA-style metallic black/gold) */
+  .vtoolbar{position:absolute;left:12px;top:12px;z-index:10050;display:flex;flex-direction:column;gap:8px;background:linear-gradient(180deg,#080809,#0f0f11);padding:10px;border-radius:12px;border:1px solid rgba(176,127,42,0.08);box-shadow:0 10px 30px rgba(0,0,0,0.7)}
+  .vtool{width:48px;height:48px;display:flex;align-items:center;justify-content:center;border-radius:10px;background:linear-gradient(180deg,#0b0b0d,#18181b);cursor:pointer;position:relative;border:1px solid rgba(176,127,42,0.06)}
+  .vtool:hover{transform:translateX(6px);box-shadow:0 6px 18px rgba(176,127,42,0.12)}
+  .vtool svg{width:22px;height:22px;fill:var(--gold);stroke:var(--gold-strong);stroke-width:0}
+  .vtool .tip{position:absolute;left:60px;top:50%;transform:translateY(-50%);background:rgba(0,0,0,0.85);color:#fff;padding:6px 8px;border-radius:6px;font-size:13px;display:none}
+  .vtool:hover .tip{display:block}
+  /* color picker popup */
+  .picker{position:absolute;left:72px;top:0;transform:translateY(4px);background:rgba(12,12,14,0.96);padding:8px;border-radius:8px;border:1px solid rgba(176,127,42,0.06);display:none;z-index:10100}
+  /* chat */
+  .chat{position:absolute;right:12px;top:12px;width:320px;height:70vh;background:linear-gradient(180deg,#060607,#0a0a0b);color:#e6eef6;border-radius:12px;padding:0;z-index:10040;display:flex;flex-direction:column;box-shadow:0 12px 36px rgba(0,0,0,0.6);border:1px solid rgba(176,127,42,0.04);overflow:hidden}
+  .chat .head{padding:12px;border-bottom:1px solid rgba(255,255,255,0.03);font-weight:700;display:flex;justify-content:space-between;align-items:center}
+  .chat .messages{flex:1;overflow:auto;padding:10px;font-size:13px}
+  .chat .input{display:flex;gap:6px;padding:10px;border-top:1px solid rgba(255,255,255,0.03)}
+  .chat input{flex:1;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,0.04);background:transparent;color:#fff}
+  .coords{position:absolute;right:12px;bottom:12px;background:rgba(8,8,10,0.95);padding:8px;border-radius:8px;color:#dbe9f6;font-family:monospace;z-index:10060}
+  .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:11000}
+  .modal{background:linear-gradient(180deg,#0b0b0d,#101012);padding:20px;border-radius:10px;border:1px solid rgba(176,127,42,0.06);width:360px;color:#fff}
+  .modal input{width:100%;padding:8px;margin-top:8px;border-radius:6px;border:1px solid rgba(255,255,255,0.06);background:transparent;color:#fff}
+  .button{background:linear-gradient(180deg,#1b1b1e,#0f0f11);padding:8px 12px;border-radius:8px;border:1px solid rgba(176,127,42,0.08);color:var(--gold);cursor:pointer;margin-top:10px}
+  .text-label{font-weight:700;color:var(--gold);text-shadow:0 1px 2px rgba(0,0,0,0.6)}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<!-- Left toolbar -->
+<div class="vtoolbar" id="vtoolbar" aria-hidden="true">
+  <div class="vtool" id="t-marker" title="Add Marker">
+    <!-- marker SVG -->
+    <svg viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5S10.62 6.5 12 6.5s2.5 1.12 2.5 2.5S13.38 11.5 12 11.5z"/></svg>
+    <div class="tip">Marker</div>
+  </div>
+
+  <div class="vtool" id="t-text" title="Add Text">
+    <svg viewBox="0 0 24 24"><path d="M5 4v3h5.5v12h3V7H19V4z"/></svg>
+    <div class="tip">Text</div>
+  </div>
+
+  <div class="vtool" id="t-draw" title="Draw (choose)">
+    <svg viewBox="0 0 24 24"><path d="M2 17.25V22h4.75L17.81 10.94l-4.75-4.75L2 17.25z"/></svg>
+    <div class="tip">Draw</div>
+  </div>
+
+  <div class="vtool" id="t-high" title="Highlighter">
+    <svg viewBox="0 0 24 24"><path d="M12 2v20"/></svg>
+    <div class="tip">Highlighter</div>
+  </div>
+
+  <div class="vtool" id="t-undo" title="Undo">
+    <svg viewBox="0 0 24 24"><path d="M12 8V4l-8 8 8 8v-4c4 0 6 1 8 4-2-4-4-8-8-8z"/></svg>
+    <div class="tip">Undo</div>
+  </div>
+
+  <div class="vtool" id="t-clear" title="Clear">
+    <svg viewBox="0 0 24 24"><path d="M6 19c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V7H6v12z"/></svg>
+    <div class="tip">Clear</div>
+  </div>
+
+  <div class="vtool" id="t-export" title="Export">
+    <svg viewBox="0 0 24 24"><path d="M5 20h14v-2H5v2zm7-18L5.33 9h3.67v6h4V9h3.67L12 2z"/></svg>
+    <div class="tip">Export</div>
+  </div>
+
+  <div class="vtool" id="t-save" title="Save (shared)">
+    <svg viewBox="0 0 24 24"><path d="M5 5v14h14V7.5L16.5 5H5zm7 2l3 3h-2v4h-2v-4H9l3-3z"/></svg>
+    <div class="tip">Save</div>
+  </div>
+
+  <div class="vtool" id="t-load" title="Load (shared)">
+    <svg viewBox="0 0 24 24"><path d="M12 2v8l3-3-3-3zM4 12v8h16v-8h-2v6H6v-6H4z"/></svg>
+    <div class="tip">Load</div>
+  </div>
+
+  <div class="vtool" id="t-chat" title="Chat">
+    <svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v14l4-4h14"/></svg>
+    <div class="tip">Chat</div>
+  </div>
+</div>
+
+<!-- color picker popup -->
+<div class="picker" id="picker"><label style="color:var(--gold)">Highlighter color</label><br><input type="color" id="pickColor" value="#ffd700"></div>
+
+<!-- chat -->
+<div class="chat" id="chat" style="display:none">
+  <div class="head">Room chat <button id="closeChat" style="background:transparent;border:0;color:var(--gold)">Close</button></div>
+  <div class="messages" id="chatMsgs"></div>
+  <div class="input"><input id="chatInput" placeholder="Message"/><button id="chatSend">Send</button></div>
+</div>
+
+<div class="coords" id="coords">X: -, Y: -</div>
+
+<!-- modal for room code -->
+<div class="modal-backdrop" id="roomModal">
+  <div class="modal">
+    <div style="font-weight:800;font-size:18px;margin-bottom:6px">Enter room code</div>
+    <div style="color:#bfc7cf;font-size:13px">Use a short code (letters/numbers) that you'll share with collaborators. Editing is disabled until you enter it.</div>
+    <input id="roomInput" placeholder="e.g. crew1"/>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="button" id="joinBtn">Join Room</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet-draw@1.0.4/dist/leaflet.draw.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/gun/gun.js"></script>
+<script>
+/* Basic map setup */
+const IMAGE = 'https://i.postimg.cc/9M1Dgfg3/GTAV-ATLUS-2048x2048.png';
+const W=2048, H=2048;
+const map = L.map('map', { crs: L.CRS.Simple, minZoom:-2, maxZoom:2, zoomSnap:0.25 });
+const bounds = L.latLngBounds(map.unproject([0,H], map.getMaxZoom()), map.unproject([W,0], map.getMaxZoom()));
+L.imageOverlay(IMAGE, bounds).addTo(map);
+map.fitBounds(bounds);
+
+/* layers and draw control */
+const markerLayer = L.featureGroup().addTo(map);
+const drawnItems = L.featureGroup().addTo(map);
+const drawControl = new L.Control.Draw({ edit: { featureGroup: drawnItems }, draw: { polygon:true, polyline:true, rectangle:true, circle:true, marker:false }});
+map.addControl(drawControl);
+
+/* state */
+let ROOM = null;
+let gun, roomNode, savedNode, chatNode;
+const layersById = new Map();
+const undoStack = [];
+let currentHighColor = '#ffd700';
+
+/* helpers */
+function notify(msg){ const s = document.getElementById('coords'); s.textContent = msg; setTimeout(()=> s.textContent=' ',2500); }
+function escapeHtml(s){ return s?(''+s).replace(/[&<>"'`]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','`':'&#96;'}[c])):''; }
+function layerToObject(layer){
+  if(layer instanceof L.Marker){
+    const lat = layer.getLatLng();
+    return { type:'marker', coords:[lat.lng,lat.lat], props: layer._custom || {} };
+  } else {
+    return { type:'shape', geojson: layer.toGeoJSON(), props: {} };
+  }
+}
+function saveFeature(id,payload){ if(!payload){ roomNode.get(id).put(null); return; } roomNode.get(id).put(payload); }
+function createRemoteFeature(payload){ const id='f_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,8); saveFeature(id,payload); return id; }
+function removeLocalById(id){ const l=layersById.get(id); if(!l) return; if(l instanceof L.Marker) markerLayer.removeLayer(l); else drawnItems.removeLayer(l); layersById.delete(id); }
+
+/* wiring after join */
+function initGunAndHandlers(roomCode){
+  ROOM = roomCode;
+  document.getElementById('roomModal').style.display = 'none';
+  document.getElementById('vtoolbar').setAttribute('aria-hidden','false');
+  document.getElementById('picker').style.display = 'none';
+  document.getElementById('roomInput').value = ROOM;
+  document.getElementById('coords').textContent = 'Room: ' + ROOM;
+
+  gun = Gun({ peers: ['https://gun-manhattan.herokuapp.com/gun','https://gun-us.herokuapp.com/gun'] });
+  roomNode = gun.get('gta_rooms').get(ROOM);
+  savedNode = roomNode.get('saved');
+  chatNode = gun.get('gta_rooms_chat').get(ROOM);
+
+  // listen for features in room
+  roomNode.map().on((data,id)=>{ if(!id) return; setTimeout(()=> {
+    if(!data){ removeLocalById(id); return; }
+    if(layersById.has(id)){
+      const existing = layersById.get(id);
+      if(data.type==='marker' && existing.setLatLng){ existing.setLatLng([data.coords[1],data.coords[0]]); existing._custom = data.props||{}; }
+      if(data.type==='shape'){ removeLocalById(id); const layer=L.geoJSON(data.geojson); layer.eachLayer(l=>{ drawnItems.addLayer(l); l._remoteId=id; layersById.set(id,l); }); }
+      return;
+    }
+    if(data.type==='marker'){ const lat=L.latLng(data.coords[1],data.coords[0]); const m=L.marker(lat,{draggable:true}).addTo(markerLayer); m._custom = data.props||{}; m._remoteId=id; layersById.set(id,m); m.on('dragend',()=> saveFeature(id, layerToObject(m))); }
+    else if(data.type==='shape'){ const layer=L.geoJSON(data.geojson); layer.eachLayer(l=>{ drawnItems.addLayer(l); l._remoteId=id; layersById.set(id,l); }); }
+  },0); });
+
+  // chat
+  chatNode.map().on((msg,id)=>{ if(!id) return; if(!msg) return; const el=document.getElementById('chatMsgs'); const d=document.createElement('div'); d.textContent=(msg.user||'anon')+': '+(msg.text||''); el.appendChild(d); el.scrollTop = el.scrollHeight; });
+
+  // savedNode optional catch: show last saved?
+}
+
+/* drawing handlers */
+map.on(L.Draw.Event.CREATED, function(e){
+  const layer = e.layer;
+  drawnItems.addLayer(layer);
+  undoStack.push(layer);
+  const obj = layerToObject(layer);
+  const id = createRemoteFeature(obj);
+  layer._remoteId = id; layersById.set(id,layer);
+});
+
+map.on(L.Draw.Event.EDITED, function(e){ e.layers.eachLayer(layer=>{ if(layer._remoteId) saveFeature(layer._remoteId, layerToObject(layer)); }); });
+
+map.on(L.Draw.Event.DELETED, function(e){ e.layers.eachLayer(layer=>{ if(layer._remoteId) saveFeature(layer._remoteId, null); }); });
+
+/* toolbar behavior (requires ROOM init) */
+document.getElementById('t-marker').addEventListener('click', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  map.once('click', e=>{
+    const m = L.marker(e.latlng, { draggable:true }).addTo(markerLayer);
+    m._custom = {};
+    undoStack.push(m);
+    const id = createRemoteFeature(layerToObject(m)); m._remoteId = id; layersById.set(id,m);
+    m.on('dragend', ()=> saveFeature(id, layerToObject(m)));
+  });
+});
+
+document.getElementById('t-text').addEventListener('click', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  map.once('click', e=>{
+    const txt = prompt('Enter text:','Label'); if(!txt) return;
+    const icon = L.divIcon({ className:'text-label', html: escapeHtml(txt) });
+    const m = L.marker(e.latlng, { icon: icon, draggable:true }).addTo(markerLayer);
+    m._custom = { text: txt }; undoStack.push(m);
+    const id = createRemoteFeature(layerToObject(m)); m._remoteId = id; layersById.set(id,m);
+    m.on('dragend', ()=> saveFeature(id, layerToObject(m)));
+    m.on('dblclick', ()=>{ const newt = prompt('Edit text:', m._custom.text || txt); if(newt!==null){ m._custom.text=newt; m.setIcon(L.divIcon({ className:'text-label', html: escapeHtml(newt) })); saveFeature(m._remoteId, layerToObject(m)); } });
+  });
+});
+
+document.getElementById('t-draw').addEventListener('click', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  const choice = prompt('Choose shape: polygon, polyline, rectangle, circle','polygon'); if(!choice) return;
+  if(choice==='polyline') new L.Draw.Polyline(map).enable();
+  else if(choice==='polygon') new L.Draw.Polygon(map).enable();
+  else if(choice==='rectangle') new L.Draw.Rectangle(map).enable();
+  else if(choice==='circle') new L.Draw.Circle(map).enable();
+});
+
+document.getElementById('t-high').addEventListener('click', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  const p = document.getElementById('picker');
+  p.style.display = (p.style.display==='none' || !p.style.display)?'block':'none';
+});
+document.getElementById('pickColor').addEventListener('input', (e)=> currentHighColor = e.target.value);
+document.getElementById('t-high').addEventListener('dblclick', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  map.once('click', e=>{
+    const c = currentHighColor;
+    const cm = L.circleMarker(e.latlng, { radius:10, color:c, fillColor:c, fillOpacity:0.85 }).addTo(markerLayer);
+    cm._custom = { highlight:true, color:c };
+    undoStack.push(cm);
+    const id = createRemoteFeature(layerToObject(cm)); cm._remoteId = id; layersById.set(id,cm);
+  });
+});
+
+document.getElementById('t-undo').addEventListener('click', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  if(undoStack.length===0) return;
+  const last = undoStack.pop();
+  const rid = last._remoteId;
+  if(rid) saveFeature(rid, null);
+  if(markerLayer.hasLayer(last)) markerLayer.removeLayer(last);
+  if(drawnItems.hasLayer(last)) drawnItems.removeLayer(last);
+});
+
+document.getElementById('t-clear').addEventListener('click', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  if(!confirm('Clear all objects for everyone?')) return;
+  markerLayer.clearLayers(); drawnItems.clearLayers(); undoStack.length = 0;
+  layersById.forEach((v,k)=> roomNode.get(k).put(null));
+});
+
+document.getElementById('t-export').addEventListener('click', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  const features = [];
+  markerLayer.eachLayer(l=>{ if(l instanceof L.Marker){ const lat=l.getLatLng(); const props=l._custom||{}; features.push({ type:'Feature', geometry:{ type:'Point', coordinates:[lat.lng,lat.lat]}, properties: props }); }});
+  drawnItems.eachLayer(l=> features.push(l.toGeoJSON()));
+  const fc = { type:'FeatureCollection', features: features };
+  const blob = new Blob([JSON.stringify(fc,null,2)], { type:'application/json' }); const url = URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='gta_map_export.geojson'; a.click(); URL.revokeObjectURL(url);
+});
+
+/* Save/load (shared via Gun) */
+document.getElementById('t-save').addEventListener('click', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  const features = [];
+  markerLayer.eachLayer(l=>{ if(l instanceof L.Marker){ const lat=l.getLatLng(); const props=l._custom||{}; features.push({ type:'Feature', geometry:{ type:'Point', coordinates:[lat.lng,lat.lat]}, properties: props }); }});
+  drawnItems.eachLayer(l=> features.push(l.toGeoJSON()));
+  const fc = { type:'FeatureCollection', features: features, ts: Date.now(), savedBy: 'client' };
+  savedNode.put(fc, ack=>{ notify('Saved to room'); });
+});
+
+document.getElementById('t-load').addEventListener('click', ()=> {
+  if(!ROOM) return alert('Join a room first.');
+  savedNode.once(function(data,key){ if(!data || !data.features){ return alert('No saved map found for this room.'); }
+    // clear current
+    markerLayer.clearLayers(); drawnItems.clearLayers(); undoStack.length = 0;
+    const fc = data;
+    fc.features.forEach(f=>{
+      if(f.geometry && f.geometry.type === 'Point'){
+        const coords = f.geometry.coordinates;
+        const m = L.marker([coords[1], coords[0]], { draggable:true }).addTo(markerLayer);
+        m._custom = f.properties || {}; undoStack.push(m);
+        const id = createRemoteFeature(layerToObject(m)); m._remoteId = id; layersById.set(id,m); m.on('dragend', ()=> saveFeature(id, layerToObject(m)));
+      } else {
+        const layer = L.geoJSON(f);
+        layer.eachLayer(l=>{ drawnItems.addLayer(l); undoStack.push(l); const id=createRemoteFeature(layerToObject(l)); l._remoteId=id; layersById.set(id,l); });
+      }
+    });
+    notify('Loaded saved map for room');
+  });
+});
+
+/* chat */
+document.getElementById('t-chat').addEventListener('click', ()=> {
+  const c = document.getElementById('chat'); c.style.display = (c.style.display==='none' || !c.style.display)?'flex':'none';
+});
+document.getElementById('chatSend').addEventListener('click', ()=> {
+  const v = document.getElementById('chatInput').value; if(!v) return;
+  const id = 'm_'+Date.now().toString(36)+'_'+Math.random().toString(36).slice(2,6);
+  chatNode.get(id).put({ user: 'anon', text: v, ts: Date.now() }); document.getElementById('chatInput').value = '';
+});
+
+/* room join modal */
+document.getElementById('joinBtn').addEventListener('click', ()=> {
+  const code = (document.getElementById('roomInput').value || '').trim();
+  if(!code){ alert('Please enter a room code.'); return; }
+  initGunAndHandlers(code);
+});
+
+/* show coords */
+map.on('mousemove', e=> {
+  const p = map.project(e.latlng, map.getMaxZoom());
+  const x = Math.round(p.x), y = Math.round(p.y);
+  document.getElementById('coords').textContent = `X: ${x}, Y: ${y}`;
+});
+
+</script>
+</body>
+</html>
